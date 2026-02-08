@@ -1,5 +1,5 @@
 [package]
-name = "pong_gba"
+name = "minesweeper_gba"
 version = "0.1.0"
 authors = ["Steven Eisinger (restive.engines)"]
 edition = "2024"
