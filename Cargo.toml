@@ -1,0 +1,20 @@
+[package]
+name = "pong_gba"
+version = "0.1.0"
+authors = ["Steven Eisinger (restive.engines)"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+agb = "0.22.6"
+agb_tracker = "0.22.6"
+
+[profile.dev]
+opt-level = 3
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+debug = true
