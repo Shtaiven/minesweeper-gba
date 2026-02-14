@@ -9,7 +9,7 @@
 extern crate alloc;
 
 use agb::display::{
-    GraphicsFrame, Priority,
+    Graphics, GraphicsFrame, Priority,
     object::Object,
     tiled::{RegularBackground, RegularBackgroundSize, TileFormat, VRAM_MANAGER},
 };
@@ -33,11 +33,53 @@ include_aseprite!(
 );
 
 // Music and Sound import
-static BALL_PADDLE_HIT: SoundData = include_wav!("sfx/ball-paddle-hit.wav");
+static CURSOR_MOVE: SoundData = include_wav!("sfx/ball-paddle-hit.wav");
 static BGM: Track = include_xm!("sfx/bgm.xm");
 
 type Fixed = Num<i32, 8>;
 
+pub enum BlockTileType {
+    BLANK,
+    FLAG,
+    QUESTION,
+}
+
+fn draw_block_tile(bg: &mut RegularBackground, pos: Vector2D<i32>) {
+    for y in 0..2 {
+        for x in 0..2 {
+            // Index alternates between 0/1 for even rows
+            // and 2/3 for odd rows, forming a 16x16 block
+            let tile_index = (x % 2 + (y % 2 * 2)) as usize;
+
+            bg.set_tile(
+                (pos.x + x, pos.y + y),
+                &background::BLOCKS.tiles,
+                background::BLOCKS.tile_settings[tile_index],
+            );
+        }
+    }
+}
+
+pub struct PlayerCursor {
+    pos: Vector2D<Fixed>,
+}
+
+impl PlayerCursor {
+    pub fn new(pos: Vector2D<Fixed>) -> Self {
+        Self { pos: pos }
+    }
+
+    pub fn set_pos(&mut self, pos: Vector2D<Fixed>) {
+        self.pos = pos;
+    }
+
+    pub fn show(&self, frame: &mut GraphicsFrame) {
+        let sprite_pos = self.pos.round();
+        Object::new(sprites::CURSOR.sprite(0))
+            .set_pos(sprite_pos)
+            .show(frame);
+    }
+}
 
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
@@ -53,20 +95,7 @@ fn main(mut gba: agb::Gba) -> ! {
         TileFormat::FourBpp,
     );
 
-    // Draw a blank block tile
-    for y in 0..20 {
-        for x in 0..30 {
-            // Index alternates between 0/1 for even rows
-            // and 2/3 for odd rows, forming a 16x16 block
-            let tile_index = x%2 + (y%2 * 2);
-
-            bg.set_tile(
-                (x as i32, y as i32),
-                &background::BLOCKS.tiles,
-                background::BLOCKS.tile_settings[tile_index],
-            );
-        }
-    }
+    // Draw the player cursor
 
     // Get the graphics manager, responsible for all the graphics
     let mut gfx = gba.graphics.get();
@@ -77,15 +106,25 @@ fn main(mut gba: agb::Gba) -> ! {
     // Tracker for BGM
     let mut tracker = Tracker::new(&BGM);
 
+    // Draw a blank block tile
+    for y in (2..18).step_by(2) {
+        for x in (2..28).step_by(2) {
+            draw_block_tile(&mut bg, Vector2D::new(x, y));
+        }
+    }
+
+    // Player cursor sprite
+    let mut player_cursor = PlayerCursor::new(vec2(num!(112), num!(64))); // the left paddle
+
     loop {
         // Read buttons
         button_controller.update();
-
 
         // Prepare the frame
         let mut frame = gfx.frame();
 
         bg.show(&mut frame);
+        player_cursor.show(&mut frame);
         tracker.step(&mut mixer);
         mixer.frame();
         frame.commit();
