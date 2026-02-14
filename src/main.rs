@@ -73,8 +73,12 @@ impl PlayerCursor {
         self.pos = pos;
     }
 
-    pub fn move_by(&mut self, pos: Vector2D<Fixed>) {
+    pub fn move_by(&mut self, pos: Vector2D<Fixed>, mixer: &mut Mixer) {
         self.pos += pos;
+        if pos.x != num!(0) || pos.y != num!(0) {
+            let hit_sound = SoundChannel::new(CURSOR_MOVE);
+            mixer.play_sound(hit_sound);
+        }
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
@@ -125,10 +129,13 @@ fn main(mut gba: agb::Gba) -> ! {
         button_controller.update();
 
         // Move the cursor
-        player_cursor.move_by(vec2(
-            Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
-            Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
-        ));
+        player_cursor.move_by(
+            vec2(
+                Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
+                Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
+            ),
+            &mut mixer,
+        );
 
         // Prepare the frame
         let mut frame = gfx.frame();
