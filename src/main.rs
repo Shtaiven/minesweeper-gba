@@ -73,6 +73,10 @@ impl PlayerCursor {
         self.pos = pos;
     }
 
+    pub fn move_by(&mut self, pos: Vector2D<Fixed>) {
+        self.pos += pos;
+    }
+
     pub fn show(&self, frame: &mut GraphicsFrame) {
         let sprite_pos = self.pos.round();
         Object::new(sprites::CURSOR.sprite(0))
@@ -106,7 +110,7 @@ fn main(mut gba: agb::Gba) -> ! {
     // Tracker for BGM
     let mut tracker = Tracker::new(&BGM);
 
-    // Draw a blank block tile
+    // Draw blank block tiles
     for y in (2..18).step_by(2) {
         for x in (2..28).step_by(2) {
             draw_block_tile(&mut bg, Vector2D::new(x, y));
@@ -119,6 +123,12 @@ fn main(mut gba: agb::Gba) -> ! {
     loop {
         // Read buttons
         button_controller.update();
+
+        // Move the cursor
+        player_cursor.move_by(vec2(
+            Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
+            Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
+        ));
 
         // Prepare the frame
         let mut frame = gfx.frame();
