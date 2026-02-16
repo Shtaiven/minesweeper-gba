@@ -11,13 +11,15 @@ extern crate alloc;
 use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
-    tiled::{RegularBackground, RegularBackgroundSize, TileFormat, VRAM_MANAGER},
+    tile_data::TileData,
+    tiled::{RegularBackground, RegularBackgroundSize, TileFormat, TileSet, VRAM_MANAGER},
 };
 use agb::fixnum::{Num, Rect, Vector2D, num, vec2};
 use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel, SoundData};
 use agb::{include_aseprite, include_background_gfx, include_wav};
 use agb_tracker::{Track, Tracker, include_xm};
+use alloc::vec::Vec;
 
 // Background import
 include_background_gfx!(
@@ -37,28 +39,6 @@ static CURSOR_MOVE: SoundData = include_wav!("sfx/ball-paddle-hit.wav");
 static BGM: Track = include_xm!("sfx/bgm.xm");
 
 type Fixed = Num<i32, 8>;
-
-pub enum BlockTileType {
-    BLANK,
-    FLAG,
-    QUESTION,
-}
-
-fn draw_block_tile(bg: &mut RegularBackground, pos: Vector2D<i32>) {
-    for y in 0..2 {
-        for x in 0..2 {
-            // Index alternates between 0/1 for even rows
-            // and 2/3 for odd rows, forming a 16x16 block
-            let tile_index = (x % 2 + (y % 2 * 2)) as usize;
-
-            bg.set_tile(
-                (pos.x + x, pos.y + y),
-                &background::BLOCKS.tiles,
-                background::BLOCKS.tile_settings[tile_index],
-            );
-        }
-    }
-}
 
 pub struct PlayerCursor {
     pos: Vector2D<Fixed>,
@@ -89,6 +69,97 @@ impl PlayerCursor {
     }
 }
 
+pub enum MinefieldBlock {
+    Clear,
+    Block,
+    Flag,
+    Question,
+}
+
+pub enum MinefieldItem {
+    Blank,
+    Number1,
+    Number2,
+    Number3,
+    Number4,
+    Number5,
+    Number6,
+    Number7,
+    Number8,
+    Mine,
+}
+
+pub struct Minefield {
+    size: Vector2D<i32>,
+    mines: Vec<bool>,
+    blocks: Vec<MinefieldBlock>,
+}
+
+pub struct Tile16Indices(usize, usize, usize, usize);
+
+impl Minefield {
+    pub fn new(size: Vector2D<i32>) -> Self {
+        Self {
+            size: size,
+            mines: Vec::with_capacity((size.x * size.y) as usize),
+            blocks: Vec::with_capacity((size.x * size.y) as usize),
+        }
+    }
+
+    // TODO: Place mine field into a struct
+    pub fn set_size(&mut self, size: Vector2D<i32>) {
+        self.size = size;
+        self.mines = Vec::with_capacity((size.x * size.y) as usize);
+        self.blocks = Vec::with_capacity((size.x * size.y) as usize);
+    }
+
+    pub fn gen_mines(&mut self) {
+        // TODO: Generate mines
+    }
+
+    fn draw_tile16(
+        bg: &mut RegularBackground,
+        tile_pos: Vector2D<i32>,
+        tile_data: &TileData,
+        tile_indices: Tile16Indices,
+    ) {
+        for y in 0..2 {
+            for x in 0..2 {
+                // Index alternates between 0/1 for even rows
+                // and 2/3 for odd rows, forming a 16x16 block
+                let tile_index = (x % 2 + (y % 2 * 2)) as usize;
+                // TODO: Use provided tile indices
+
+                bg.set_tile(
+                    (tile_pos.x + x, tile_pos.y + y),
+                    &tile_data.tiles,
+                    tile_data.tile_settings[tile_index],
+                );
+            }
+        }
+    }
+
+    fn rowcol_to_index(&self, rowcol: Vector2D<i32>) -> usize {
+        (rowcol.x + rowcol.y * self.size.x) as usize
+    }
+
+    pub fn draw_minefield(&self, bg: &mut RegularBackground, tile_pos: Vector2D<i32>) {
+        // Draw all the blocks
+        for col in (0..self.size.y).step_by(2) {
+            for row in (0..self.size.x).step_by(2) {
+                let index = self.rowcol_to_index(vec2(row, col));
+                // TODO: Draw all blocks (modify tile_pos)
+                Self::draw_tile16(
+                    bg,
+                    tile_pos + vec2(row, col),
+                    &background::BLOCKS,
+                    Tile16Indices(1, 2, 3, 4),
+                );
+            }
+        }
+    }
+}
+
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
     // Input manager, responsible for button presses
@@ -115,11 +186,8 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut tracker = Tracker::new(&BGM);
 
     // Draw blank block tiles
-    for y in (2..18).step_by(2) {
-        for x in (2..28).step_by(2) {
-            draw_block_tile(&mut bg, Vector2D::new(x, y));
-        }
-    }
+    let mut minefield = Minefield::new(vec2(26, 16));
+    minefield.draw_minefield(&mut bg, vec2(2, 2));
 
     // Player cursor sprite
     let mut player_cursor = PlayerCursor::new(vec2(num!(112), num!(64))); // the left paddle
