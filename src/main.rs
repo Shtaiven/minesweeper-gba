@@ -46,19 +46,21 @@ pub struct PlayerCursor {
 
 impl PlayerCursor {
     pub fn new(pos: Vector2D<Fixed>) -> Self {
-        Self { pos: pos }
+        Self { pos }
     }
 
-    pub fn set_pos(&mut self, pos: Vector2D<Fixed>) {
+    pub fn set_pos(&mut self, pos: Vector2D<Fixed>) -> &mut Self {
         self.pos = pos;
+        self
     }
 
-    pub fn move_by(&mut self, pos: Vector2D<Fixed>, mixer: &mut Mixer) {
+    pub fn move_by(&mut self, pos: Vector2D<Fixed>, mixer: &mut Mixer) -> &mut Self {
         self.pos += pos;
         if pos.x != num!(0) || pos.y != num!(0) {
             let hit_sound = SoundChannel::new(CURSOR_MOVE);
             mixer.play_sound(hit_sound);
         }
+        self
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
@@ -91,26 +93,39 @@ pub enum MinefieldItem {
 
 pub struct Minefield {
     size: Vector2D<i32>,
+    pos: Vector2D<Fixed>,
     mines: Vec<bool>,
     blocks: Vec<MinefieldBlock>,
+    cursor: PlayerCursor,
 }
 
 pub struct Tile16Indices(usize, usize, usize, usize);
 
 impl Minefield {
-    pub fn new(size: Vector2D<i32>) -> Self {
+    /// Create a minefield with `size` (w x h) at pixel position `pos`
+    pub fn new(size: Vector2D<i32>, pos: Vector2D<Fixed>) -> Self {
         Self {
-            size: size,
+            size,
+            pos,
             mines: Vec::with_capacity((size.x * size.y) as usize),
             blocks: Vec::with_capacity((size.x * size.y) as usize),
+            cursor: PlayerCursor::new(pos),
         }
     }
 
-    // TODO: Place mine field into a struct
-    pub fn set_size(&mut self, size: Vector2D<i32>) {
+    pub fn set_size(&mut self, size: Vector2D<i32>) -> &mut Self {
         self.size = size;
         self.mines = Vec::with_capacity((size.x * size.y) as usize);
         self.blocks = Vec::with_capacity((size.x * size.y) as usize);
+        self
+    }
+
+    pub fn set_pos(&mut self, pos: Vector2D<Fixed>) -> &mut Self {
+        // Move the minefield and adjust the cursor accordingly
+        let prev_pos = self.pos;
+        self.pos = pos;
+        self.cursor.set_pos(pos - prev_pos);
+        self
     }
 
     pub fn gen_mines(&mut self) {
@@ -158,6 +173,38 @@ impl Minefield {
             }
         }
     }
+
+    fn fixed_pos_to_tile_pos(fixed: Vector2D<Fixed>) -> Vector2D<i32> {
+        // Convert a tile coordinate to actual pixel values on the screen
+        // TODO: background scroll must be taken into account
+        let pixel_pos = fixed.round();
+        Vector2D {
+            x: pixel_pos.x / 8,
+            y: pixel_pos.y / 8,
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        bg: &mut RegularBackground,
+        button_controller: &ButtonController,
+        mixer: &mut Mixer,
+    ) {
+        self.draw_minefield(bg, Self::fixed_pos_to_tile_pos(self.pos));
+
+        // Move the cursor based on controllr input
+        self.cursor.move_by(
+            vec2(
+                Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
+                Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
+            ),
+            mixer,
+        );
+    }
+
+    pub fn show(&self, frame: &mut GraphicsFrame) {
+        self.cursor.show(frame);
+    }
 }
 
 #[agb::entry]
@@ -186,30 +233,20 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut tracker = Tracker::new(&BGM);
 
     // Draw blank block tiles
-    let mut minefield = Minefield::new(vec2(26, 16));
-    minefield.draw_minefield(&mut bg, vec2(2, 2));
-
-    // Player cursor sprite
-    let mut player_cursor = PlayerCursor::new(vec2(num!(112), num!(64))); // the left paddle
+    let mut minefield = Minefield::new(vec2(26, 16), vec2(num!(16), num!(16)));
 
     loop {
         // Read buttons
         button_controller.update();
 
-        // Move the cursor
-        player_cursor.move_by(
-            vec2(
-                Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
-                Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
-            ),
-            &mut mixer,
-        );
+        minefield.update(&mut bg, &button_controller, &mut mixer);
 
         // Prepare the frame
         let mut frame = gfx.frame();
 
         bg.show(&mut frame);
-        player_cursor.show(&mut frame);
+        // player_cursor.show(&mut frame);
+        minefield.show(&mut frame);
         tracker.step(&mut mixer);
         mixer.frame();
         frame.commit();
