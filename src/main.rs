@@ -12,7 +12,9 @@ use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
     tile_data::TileData,
-    tiled::{RegularBackground, RegularBackgroundSize, TileFormat, TileSet, VRAM_MANAGER},
+    tiled::{
+        RegularBackground, RegularBackgroundSize, TileFormat, TileSet, TileSetting, VRAM_MANAGER,
+    },
 };
 use agb::fixnum::{Num, Rect, Vector2D, num, vec2};
 use agb::input::{Button, ButtonController};
@@ -165,6 +167,18 @@ impl Minefield {
         }
     }
 
+    fn clear_tile16(bg: &mut RegularBackground, tile_pos: Vector2D<i32>, tile_data: &TileData) {
+        for y in 0..2 {
+            for x in 0..2 {
+                bg.set_tile(
+                    (tile_pos.x + x, tile_pos.y + y),
+                    &tile_data.tiles,
+                    TileSetting::BLANK,
+                );
+            }
+        }
+    }
+
     fn rowcol_to_index(&self, rowcol: Vector2D<i32>) -> usize {
         (rowcol.x + rowcol.y * self.size.x) as usize
     }
@@ -190,12 +204,41 @@ impl Minefield {
         bg.set_scroll_pos((-pos.x, -pos.y));
     }
 
+    pub fn remove_tile(
+        &self,
+        bg: &mut RegularBackground,
+        tile_pos: Vector2D<i32>,
+        tile_data: &TileData,
+    ) {
+        // Early exit if the tile position isn't within bounds
+        // The size is in 16x16 tiles, but the tile_pos is in 8x8 tiles, so the size needs to be
+        // multiplied by 2
+        let size_8x8 = self.size * 2;
+        if tile_pos.x >= size_8x8.x || tile_pos.y >= size_8x8.y || tile_pos.x < 0 || tile_pos.y < 0
+        {
+            return;
+        }
+
+        // Clear the tile
+        Self::clear_tile16(bg, tile_pos, tile_data);
+    }
+
+    fn tile_under_cursor(&self) -> Vector2D<i32> {
+        let &cursor_pos = &self.cursor.pos;
+        let tile_pos = (cursor_pos - self.pos).round() / 8;
+        tile_pos
+    }
+
     pub fn update(
         &mut self,
         bg: &mut RegularBackground,
         button_controller: &ButtonController,
         mixer: &mut Mixer,
     ) {
+        if button_controller.is_just_pressed(Button::A) {
+            self.remove_tile(bg, self.tile_under_cursor(), &background::BLOCKS);
+        }
+
         // Compute where the cursor would move to
         let maybe_move_by = vec2(
             Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
