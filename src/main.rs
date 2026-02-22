@@ -24,6 +24,7 @@ use alloc::vec::Vec;
 // Background import
 include_background_gfx!(
     mod background,
+    "16171a",
     BLOCKS => deduplicate "gfx/blocks.aseprite",
     NUMBERS => deduplicate "gfx/numbers.aseprite",
 );
@@ -68,6 +69,10 @@ impl PlayerCursor {
         Object::new(sprites::CURSOR.sprite(0))
             .set_pos(sprite_pos)
             .show(frame);
+    }
+
+    pub fn collision_rect(&self) -> Rect<Fixed> {
+        Rect::new(self.pos, vec2(num!(16), num!(16)))
     }
 }
 
@@ -167,13 +172,13 @@ impl Minefield {
     pub fn draw_minefield(&self, bg: &mut RegularBackground) {
         let tile_pos = vec2(0, 0);
         // Draw all the blocks
-        for col in (0..self.size.y).step_by(2) {
-            for row in (0..self.size.x).step_by(2) {
+        for col in 0..self.size.y {
+            for row in 0..self.size.x {
                 let index = self.rowcol_to_index(vec2(row, col));
                 // TODO: Draw all blocks (modify tile_pos)
                 Self::draw_tile16(
                     bg,
-                    tile_pos + vec2(row, col),
+                    tile_pos + vec2(row * 2, col * 2),
                     &background::BLOCKS,
                     Tile16Indices(1, 2, 3, 4),
                 );
@@ -191,16 +196,27 @@ impl Minefield {
         button_controller: &ButtonController,
         mixer: &mut Mixer,
     ) {
-        // TODO: Block the cursor from moving if it would go off of the minefield area
-
-        // Move the cursor based on controllr input
-        self.cursor.move_by(
-            vec2(
-                Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
-                Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
-            ),
-            mixer,
+        // Compute where the cursor would move to
+        let maybe_move_by = vec2(
+            Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
+            Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
         );
+
+        // Block the cursor from moving if it would go off of the minefield area
+        let maybe_cursor_pos = self.cursor.pos + maybe_move_by;
+        let cursor_size = self.cursor.collision_rect().size;
+
+        // Early return if cursor would exit the minefield
+        if maybe_cursor_pos.x < self.pos.x
+            || maybe_cursor_pos.x + cursor_size.x > self.pos.x + self.size.x * 16
+            || maybe_cursor_pos.y < self.pos.y
+            || maybe_cursor_pos.y + cursor_size.y > self.pos.y + self.size.y * 16
+        {
+            return;
+        }
+
+        // Move the cursor based on controller input
+        self.cursor.move_by(maybe_move_by, mixer);
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
@@ -234,7 +250,7 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut tracker = Tracker::new(&BGM);
 
     // Draw blank block tiles
-    let mut minefield = Minefield::new(vec2(26, 16), vec2(num!(16), num!(16)));
+    let mut minefield = Minefield::new(vec2(13, 8), vec2(num!(16), num!(16)));
     minefield.draw_minefield(&mut bg);
 
     loop {
