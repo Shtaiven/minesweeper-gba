@@ -120,11 +120,17 @@ impl Minefield {
         self
     }
 
-    pub fn set_pos(&mut self, pos: Vector2D<Fixed>) -> &mut Self {
+    pub fn set_pos(&mut self, bg: &mut RegularBackground, pos: Vector2D<Fixed>) -> &mut Self {
         // Move the minefield and adjust the cursor accordingly
         let prev_pos = self.pos;
         self.pos = pos;
-        self.cursor.set_pos(pos - prev_pos);
+
+        // Set the pos of the minefield
+        let pixel_pos = pos.round();
+        bg.set_scroll_pos((-pixel_pos.x, -pixel_pos.y));
+
+        // Set the pos of the cursor
+        self.cursor.set_pos(self.cursor.pos + (pos - prev_pos));
         self
     }
 
@@ -158,7 +164,8 @@ impl Minefield {
         (rowcol.x + rowcol.y * self.size.x) as usize
     }
 
-    pub fn draw_minefield(&self, bg: &mut RegularBackground, tile_pos: Vector2D<i32>) {
+    pub fn draw_minefield(&self, bg: &mut RegularBackground) {
+        let tile_pos = vec2(0, 0);
         // Draw all the blocks
         for col in (0..self.size.y).step_by(2) {
             for row in (0..self.size.x).step_by(2) {
@@ -172,16 +179,10 @@ impl Minefield {
                 );
             }
         }
-    }
 
-    fn fixed_pos_to_tile_pos(fixed: Vector2D<Fixed>) -> Vector2D<i32> {
-        // Convert a tile coordinate to actual pixel values on the screen
-        // TODO: background scroll must be taken into account
-        let pixel_pos = fixed.round();
-        Vector2D {
-            x: pixel_pos.x / 8,
-            y: pixel_pos.y / 8,
-        }
+        // Scroll the background to take into account off-tile position
+        let pos = self.pos.round();
+        bg.set_scroll_pos((-pos.x, -pos.y));
     }
 
     pub fn update(
@@ -190,7 +191,7 @@ impl Minefield {
         button_controller: &ButtonController,
         mixer: &mut Mixer,
     ) {
-        self.draw_minefield(bg, Self::fixed_pos_to_tile_pos(self.pos));
+        // TODO: Block the cursor from moving if it would go off of the minefield area
 
         // Move the cursor based on controllr input
         self.cursor.move_by(
@@ -234,6 +235,7 @@ fn main(mut gba: agb::Gba) -> ! {
 
     // Draw blank block tiles
     let mut minefield = Minefield::new(vec2(26, 16), vec2(num!(16), num!(16)));
+    minefield.draw_minefield(&mut bg);
 
     loop {
         // Read buttons
@@ -245,7 +247,6 @@ fn main(mut gba: agb::Gba) -> ! {
         let mut frame = gfx.frame();
 
         bg.show(&mut frame);
-        // player_cursor.show(&mut frame);
         minefield.show(&mut frame);
         tracker.step(&mut mixer);
         mixer.frame();
