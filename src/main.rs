@@ -21,6 +21,7 @@ use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel, SoundData};
 use agb::{include_aseprite, include_background_gfx, include_wav};
 use agb_tracker::{Track, Tracker, include_xm};
+use alloc::vec;
 use alloc::vec::Vec;
 
 // Background import
@@ -78,6 +79,7 @@ impl PlayerCursor {
     }
 }
 
+#[derive(Clone)]
 pub enum MinefieldBlock {
     Clear,
     Block,
@@ -87,14 +89,7 @@ pub enum MinefieldBlock {
 
 pub enum MinefieldItem {
     Blank,
-    Number1,
-    Number2,
-    Number3,
-    Number4,
-    Number5,
-    Number6,
-    Number7,
-    Number8,
+    Number(u32),
     Mine,
 }
 
@@ -106,16 +101,18 @@ pub struct Minefield {
     cursor: PlayerCursor,
 }
 
-pub struct Tile16Indices(usize, usize, usize, usize);
+pub struct Tile16Indices([usize; 4]);
 
 impl Minefield {
     /// Create a minefield with `size` (w x h) at pixel position `pos`
     pub fn new(size: Vector2D<i32>, pos: Vector2D<Fixed>) -> Self {
+        let mines = vec![false; (size.x * size.y) as usize];
+        let blocks = vec![MinefieldBlock::Block; (size.x * size.y) as usize];
         Self {
             size,
             pos,
-            mines: Vec::with_capacity((size.x * size.y) as usize),
-            blocks: Vec::with_capacity((size.x * size.y) as usize),
+            mines,
+            blocks,
             cursor: PlayerCursor::new(pos),
         }
     }
@@ -155,13 +152,11 @@ impl Minefield {
             for x in 0..2 {
                 // Index alternates between 0/1 for even rows
                 // and 2/3 for odd rows, forming a 16x16 block
-                let tile_index = (x % 2 + (y % 2 * 2)) as usize;
-                // TODO: Use provided tile indices
-
+                let tile_index = (x + (y * 2)) as usize;
                 bg.set_tile(
                     (tile_pos.x + x, tile_pos.y + y),
                     &tile_data.tiles,
-                    tile_data.tile_settings[tile_index],
+                    tile_data.tile_settings[tile_indices.0[tile_index]],
                 );
             }
         }
@@ -179,8 +174,8 @@ impl Minefield {
         }
     }
 
-    fn rowcol_to_index(&self, rowcol: Vector2D<i32>) -> usize {
-        (rowcol.x + rowcol.y * self.size.x) as usize
+    fn tile_pos_to_index(&self, tile_pos: Vector2D<i32>) -> usize {
+        (tile_pos.x + tile_pos.y * self.size.x) as usize
     }
 
     pub fn draw_minefield(&self, bg: &mut RegularBackground) {
@@ -188,13 +183,13 @@ impl Minefield {
         // Draw all the blocks
         for col in 0..self.size.y {
             for row in 0..self.size.x {
-                let index = self.rowcol_to_index(vec2(row, col));
-                // TODO: Draw all blocks (modify tile_pos)
+                let index = self.tile_pos_to_index(vec2(row, col));
+                // TODO: Draw all blocks based on self.blocks
                 Self::draw_tile16(
                     bg,
                     tile_pos + vec2(row * 2, col * 2),
                     &background::BLOCKS,
-                    Tile16Indices(1, 2, 3, 4),
+                    Tile16Indices([0, 1, 2, 3]),
                 );
             }
         }
@@ -205,7 +200,37 @@ impl Minefield {
     }
 
     pub fn remove_tile(
-        &self,
+        &mut self,
+        bg: &mut RegularBackground,
+        tile_pos: Vector2D<i32>,
+        tile_data: &TileData,
+    ) {
+        // Early exit if the tile position isn't within bounds
+        // The size is in 16x16 tiles, but the tile_pos is in 8x8 tiles, so the size needs to be
+        // multiplied by 2
+        let size_8x8 = self.size;
+        if tile_pos.x >= size_8x8.x || tile_pos.y >= size_8x8.y || tile_pos.x < 0 || tile_pos.y < 0
+        {
+            return;
+        }
+
+        let index = self.tile_pos_to_index(tile_pos);
+        // Check if the tile can be cleared (i.e. not cleared or flagged status)
+        match self.blocks[index] {
+            MinefieldBlock::Clear | MinefieldBlock::Flag => return,
+            _ => (),
+        }
+
+        // Set the clear status of the tile
+        self.blocks[index] = MinefieldBlock::Clear;
+
+        // Clear the tile
+        // Multiply tile_pos by 2 because clear tile uses 8x8 coordinates
+        Self::clear_tile16(bg, tile_pos * 2, tile_data);
+    }
+
+    pub fn cycle_tile_state(
+        &mut self,
         bg: &mut RegularBackground,
         tile_pos: Vector2D<i32>,
         tile_data: &TileData,
@@ -219,13 +244,36 @@ impl Minefield {
             return;
         }
 
-        // Clear the tile
-        Self::clear_tile16(bg, tile_pos, tile_data);
+        let index = self.tile_pos_to_index(tile_pos);
+        // Check if the tile can be modified (i.e. not cleared)
+        let next_block_type: MinefieldBlock;
+        let tile_indices: Tile16Indices;
+        match self.blocks[index] {
+            MinefieldBlock::Clear => return,
+            MinefieldBlock::Block => {
+                next_block_type = MinefieldBlock::Flag;
+                tile_indices = Tile16Indices([4, 5, 6, 7]);
+            }
+            MinefieldBlock::Flag => {
+                next_block_type = MinefieldBlock::Question;
+                tile_indices = Tile16Indices([8, 9, 10, 11]);
+            }
+            MinefieldBlock::Question => {
+                next_block_type = MinefieldBlock::Block;
+                tile_indices = Tile16Indices([0, 1, 2, 3]);
+            }
+        }
+
+        // Set the clear status of the tile
+        self.blocks[index] = next_block_type;
+
+        // Draw the tile
+        Self::draw_tile16(bg, tile_pos * 2, tile_data, tile_indices);
     }
 
     fn tile_under_cursor(&self) -> Vector2D<i32> {
         let &cursor_pos = &self.cursor.pos;
-        let tile_pos = (cursor_pos - self.pos).round() / 8;
+        let tile_pos = (cursor_pos - self.pos).round() / 16;
         tile_pos
     }
 
@@ -237,6 +285,12 @@ impl Minefield {
     ) {
         if button_controller.is_just_pressed(Button::A) {
             self.remove_tile(bg, self.tile_under_cursor(), &background::BLOCKS);
+            return;
+        }
+
+        if button_controller.is_just_pressed(Button::B) {
+            self.cycle_tile_state(bg, self.tile_under_cursor(), &background::BLOCKS);
+            return;
         }
 
         // Compute where the cursor would move to
