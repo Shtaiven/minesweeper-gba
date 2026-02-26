@@ -8,6 +8,8 @@
 
 extern crate alloc;
 
+use core::cmp::max;
+
 use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
@@ -79,12 +81,36 @@ impl PlayerCursor {
     }
 }
 
+pub struct Tile16Indices {
+    indices: [usize; 4],
+}
+
 #[derive(Clone)]
 pub enum MinefieldBlock {
     Clear,
     Block,
     Flag,
     Question,
+}
+
+impl MinefieldBlock {
+    pub fn get_tile_indices(&self) -> Tile16Indices {
+        use MinefieldBlock::*;
+        match *self {
+            Clear => Tile16Indices {
+                indices: [0, 1, 2, 3],
+            },
+            Block => Tile16Indices {
+                indices: [0, 1, 2, 3],
+            },
+            Flag => Tile16Indices {
+                indices: [4, 5, 6, 7],
+            },
+            Question => Tile16Indices {
+                indices: [8, 9, 10, 11],
+            },
+        }
+    }
 }
 
 pub enum MinefieldItem {
@@ -100,8 +126,6 @@ pub struct Minefield {
     blocks: Vec<MinefieldBlock>,
     cursor: PlayerCursor,
 }
-
-pub struct Tile16Indices([usize; 4]);
 
 impl Minefield {
     /// Create a minefield with `size` (w x h) at pixel position `pos`
@@ -139,7 +163,13 @@ impl Minefield {
     }
 
     pub fn gen_mines(&mut self) {
-        // TODO: Generate mines
+        // Generate mines
+        for mine in &mut self.mines {
+            let rand_num = agb::rng::next_i32();
+
+            // 1/8 chance, avoids division
+            *mine = rand_num.abs() < i32::MAX >> 3;
+        }
     }
 
     fn draw_tile16(
@@ -156,7 +186,7 @@ impl Minefield {
                 bg.set_tile(
                     (tile_pos.x + x, tile_pos.y + y),
                     &tile_data.tiles,
-                    tile_data.tile_settings[tile_indices.0[tile_index]],
+                    tile_data.tile_settings[tile_indices.indices[tile_index]],
                 );
             }
         }
@@ -180,16 +210,15 @@ impl Minefield {
 
     pub fn draw_minefield(&self, bg: &mut RegularBackground) {
         let tile_pos = vec2(0, 0);
-        // Draw all the blocks
+        // Draw all the blocks based on what's contained in self.blocks
         for col in 0..self.size.y {
             for row in 0..self.size.x {
                 let index = self.tile_pos_to_index(vec2(row, col));
-                // TODO: Draw all blocks based on self.blocks
                 Self::draw_tile16(
                     bg,
                     tile_pos + vec2(row * 2, col * 2),
                     &background::BLOCKS,
-                    Tile16Indices([0, 1, 2, 3]),
+                    self.blocks[index].get_tile_indices(),
                 );
             }
         }
@@ -224,6 +253,14 @@ impl Minefield {
         // Set the clear status of the tile
         self.blocks[index] = MinefieldBlock::Clear;
 
+        // TODO: Handle mines
+        agb::println!(
+            "Block: ({}, {}); Mine: {}",
+            tile_pos.x,
+            tile_pos.y,
+            self.mines[index]
+        );
+
         // Clear the tile
         // Multiply tile_pos by 2 because clear tile uses 8x8 coordinates
         Self::clear_tile16(bg, tile_pos * 2, tile_data);
@@ -247,24 +284,21 @@ impl Minefield {
         let index = self.tile_pos_to_index(tile_pos);
         // Check if the tile can be modified (i.e. not cleared)
         let next_block_type: MinefieldBlock;
-        let tile_indices: Tile16Indices;
         match self.blocks[index] {
             MinefieldBlock::Clear => return,
             MinefieldBlock::Block => {
                 next_block_type = MinefieldBlock::Flag;
-                tile_indices = Tile16Indices([4, 5, 6, 7]);
             }
             MinefieldBlock::Flag => {
                 next_block_type = MinefieldBlock::Question;
-                tile_indices = Tile16Indices([8, 9, 10, 11]);
             }
             MinefieldBlock::Question => {
                 next_block_type = MinefieldBlock::Block;
-                tile_indices = Tile16Indices([0, 1, 2, 3]);
             }
         }
 
         // Set the clear status of the tile
+        let tile_indices = next_block_type.get_tile_indices();
         self.blocks[index] = next_block_type;
 
         // Draw the tile
@@ -348,6 +382,7 @@ fn main(mut gba: agb::Gba) -> ! {
 
     // Draw blank block tiles
     let mut minefield = Minefield::new(vec2(13, 8), vec2(num!(16), num!(16)));
+    minefield.gen_mines();
     minefield.draw_minefield(&mut bg);
 
     loop {
@@ -364,5 +399,8 @@ fn main(mut gba: agb::Gba) -> ! {
         tracker.step(&mut mixer);
         mixer.frame();
         frame.commit();
+
+        // make the random number generator harder to predict
+        let _ = agb::rng::next_i32();
     }
 }
