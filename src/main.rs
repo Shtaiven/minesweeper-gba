@@ -8,8 +8,6 @@
 
 extern crate alloc;
 
-use core::cmp::max;
-
 use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
@@ -85,7 +83,7 @@ pub struct Tile16Indices {
     indices: [usize; 4],
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum MinefieldBlock {
     Clear,
     Block,
@@ -113,10 +111,32 @@ impl MinefieldBlock {
     }
 }
 
+#[derive(PartialEq, Eq, Clone)]
 pub enum MinefieldItem {
     Blank,
     Number(u32),
     Mine,
+}
+
+// TODO: Implement correct tile indices
+impl MinefieldItem {
+    pub fn get_tile_indices(&self) -> Tile16Indices {
+        use MinefieldItem::*;
+        match *self {
+            Blank => Tile16Indices {
+                indices: [0, 1, 2, 3],
+            },
+            Number(n) => {
+                let offset = (n as usize - 1) << 2;
+                Tile16Indices {
+                    indices: [0 + offset, 1 + offset, 2 + offset, 3 + offset],
+                }
+            }
+            Mine => Tile16Indices {
+                indices: [32, 33, 34, 35],
+            },
+        }
+    }
 }
 
 pub struct Minefield {
@@ -228,6 +248,38 @@ impl Minefield {
         bg.set_scroll_pos((-pos.x, -pos.y));
     }
 
+    fn determine_minefield_item(&self, tile_pos: &Vector2D<i32>) -> MinefieldItem {
+        // First check if the item is a mine and return that if it is
+        let index = self.tile_pos_to_index(*tile_pos);
+        if self.mines[index] {
+            return MinefieldItem::Mine;
+        }
+
+        // Get the 8 tiles around the current tile_pos
+        let mut mine_count = 0u32;
+
+        // Determine the number of mines
+        for y_offset in -1..2 {
+            for x_offset in -1..2 {
+                let search_pos = vec2(tile_pos.x + x_offset, tile_pos.y + y_offset);
+                if search_pos.x < 0
+                    || search_pos.y < 0
+                    || search_pos.x >= self.size.x
+                    || search_pos.y >= self.size.y
+                {
+                    continue;
+                }
+                mine_count += self.mines[self.tile_pos_to_index(search_pos)] as u32;
+            }
+        }
+
+        // Return Number if there are any mines, otherwise blank
+        if mine_count > 0 {
+            return MinefieldItem::Number(mine_count);
+        }
+        return MinefieldItem::Blank;
+    }
+
     pub fn remove_tile(
         &mut self,
         bg: &mut RegularBackground,
@@ -246,24 +298,38 @@ impl Minefield {
         let index = self.tile_pos_to_index(tile_pos);
         // Check if the tile can be cleared (i.e. not cleared or flagged status)
         match self.blocks[index] {
-            MinefieldBlock::Clear | MinefieldBlock::Flag => return,
+            MinefieldBlock::Clear | MinefieldBlock::Flag => return, // early return if not
             _ => (),
         }
 
         // Set the clear status of the tile
         self.blocks[index] = MinefieldBlock::Clear;
 
-        // TODO: Handle mines
-        agb::println!(
-            "Block: ({}, {}); Mine: {}",
-            tile_pos.x,
-            tile_pos.y,
-            self.mines[index]
-        );
+        // Handle mines
+        // agb::println!(
+        //     "Block: ({}, {}); Mine: {}",
+        //     tile_pos.x,
+        //     tile_pos.y,
+        //     self.mines[index]
+        // );
 
         // Clear the tile
         // Multiply tile_pos by 2 because clear tile uses 8x8 coordinates
         Self::clear_tile16(bg, tile_pos * 2, tile_data);
+
+        // Determine the item to draw
+        let minefield_item = self.determine_minefield_item(&tile_pos);
+
+        // TODO: Draw the item
+        if minefield_item != MinefieldItem::Blank {
+            Self::draw_tile16(
+                bg,
+                tile_pos * 2,
+                &background::NUMBERS,
+                minefield_item.get_tile_indices(),
+            );
+        }
+        // TODO: If item is a mine, do something?
     }
 
     pub fn cycle_tile_state(
