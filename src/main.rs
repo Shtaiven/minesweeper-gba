@@ -79,7 +79,7 @@ impl PlayerCursor {
     }
 }
 
-pub struct Tile16Indices {
+pub struct BlockIndices {
     indices: [usize; 4],
 }
 
@@ -92,19 +92,19 @@ pub enum MinefieldBlock {
 }
 
 impl MinefieldBlock {
-    pub fn get_tile_indices(&self) -> Tile16Indices {
+    pub fn get_block_indices(&self) -> BlockIndices {
         use MinefieldBlock::*;
         match *self {
-            Clear => Tile16Indices {
+            Clear => BlockIndices {
                 indices: [0, 1, 2, 3],
             },
-            Block => Tile16Indices {
+            Block => BlockIndices {
                 indices: [0, 1, 2, 3],
             },
-            Flag => Tile16Indices {
+            Flag => BlockIndices {
                 indices: [4, 5, 6, 7],
             },
-            Question => Tile16Indices {
+            Question => BlockIndices {
                 indices: [8, 9, 10, 11],
             },
         }
@@ -118,23 +118,53 @@ pub enum MinefieldItem {
     Mine,
 }
 
-// TODO: Implement correct tile indices
 impl MinefieldItem {
-    pub fn get_tile_indices(&self) -> Tile16Indices {
+    pub fn get_block_indices(&self) -> BlockIndices {
         use MinefieldItem::*;
         match *self {
-            Blank => Tile16Indices {
+            Blank => BlockIndices {
                 indices: [0, 1, 2, 3],
             },
             Number(n) => {
                 let offset = (n as usize - 1) << 2;
-                Tile16Indices {
+                BlockIndices {
                     indices: [0 + offset, 1 + offset, 2 + offset, 3 + offset],
                 }
             }
-            Mine => Tile16Indices {
+            Mine => BlockIndices {
                 indices: [32, 33, 34, 35],
             },
+        }
+    }
+}
+fn draw_block(
+    bg: &mut RegularBackground,
+    tile_pos: Vector2D<i32>,
+    tile_data: &TileData,
+    tile_indices: BlockIndices,
+) {
+    for y in 0..2 {
+        for x in 0..2 {
+            // Index alternates between 0/1 for even rows
+            // and 2/3 for odd rows, forming a 16x16 block
+            let tile_index = (x + (y * 2)) as usize;
+            bg.set_tile(
+                (tile_pos.x + x, tile_pos.y + y),
+                &tile_data.tiles,
+                tile_data.tile_settings[tile_indices.indices[tile_index]],
+            );
+        }
+    }
+}
+
+fn clear_block(bg: &mut RegularBackground, tile_pos: Vector2D<i32>, tile_data: &TileData) {
+    for y in 0..2 {
+        for x in 0..2 {
+            bg.set_tile(
+                (tile_pos.x + x, tile_pos.y + y),
+                &tile_data.tiles,
+                TileSetting::BLANK,
+            );
         }
     }
 }
@@ -148,7 +178,7 @@ pub struct Minefield {
 }
 
 impl Minefield {
-    /// Create a minefield with `size` (w x h) at pixel position `pos`
+    /// Create a minefield with block `size` (w x h) at pixel position `pos`
     pub fn new(size: Vector2D<i32>, pos: Vector2D<Fixed>) -> Self {
         let mines = vec![false; (size.x * size.y) as usize];
         let blocks = vec![MinefieldBlock::Block; (size.x * size.y) as usize];
@@ -192,40 +222,8 @@ impl Minefield {
         }
     }
 
-    fn draw_tile16(
-        bg: &mut RegularBackground,
-        tile_pos: Vector2D<i32>,
-        tile_data: &TileData,
-        tile_indices: Tile16Indices,
-    ) {
-        for y in 0..2 {
-            for x in 0..2 {
-                // Index alternates between 0/1 for even rows
-                // and 2/3 for odd rows, forming a 16x16 block
-                let tile_index = (x + (y * 2)) as usize;
-                bg.set_tile(
-                    (tile_pos.x + x, tile_pos.y + y),
-                    &tile_data.tiles,
-                    tile_data.tile_settings[tile_indices.indices[tile_index]],
-                );
-            }
-        }
-    }
-
-    fn clear_tile16(bg: &mut RegularBackground, tile_pos: Vector2D<i32>, tile_data: &TileData) {
-        for y in 0..2 {
-            for x in 0..2 {
-                bg.set_tile(
-                    (tile_pos.x + x, tile_pos.y + y),
-                    &tile_data.tiles,
-                    TileSetting::BLANK,
-                );
-            }
-        }
-    }
-
-    fn tile_pos_to_index(&self, tile_pos: Vector2D<i32>) -> usize {
-        (tile_pos.x + tile_pos.y * self.size.x) as usize
+    fn block_pos_to_index(&self, block_pos: Vector2D<i32>) -> usize {
+        (block_pos.x + block_pos.y * self.size.x) as usize
     }
 
     pub fn draw_minefield(&self, bg: &mut RegularBackground) {
@@ -233,12 +231,12 @@ impl Minefield {
         // Draw all the blocks based on what's contained in self.blocks
         for col in 0..self.size.y {
             for row in 0..self.size.x {
-                let index = self.tile_pos_to_index(vec2(row, col));
-                Self::draw_tile16(
+                let index = self.block_pos_to_index(vec2(row, col));
+                draw_block(
                     bg,
                     tile_pos + vec2(row * 2, col * 2),
                     &background::BLOCKS,
-                    self.blocks[index].get_tile_indices(),
+                    self.blocks[index].get_block_indices(),
                 );
             }
         }
@@ -248,9 +246,9 @@ impl Minefield {
         bg.set_scroll_pos((-pos.x, -pos.y));
     }
 
-    fn determine_minefield_item(&self, tile_pos: &Vector2D<i32>) -> MinefieldItem {
+    fn determine_minefield_item(&self, block_pos: &Vector2D<i32>) -> MinefieldItem {
         // First check if the item is a mine and return that if it is
-        let index = self.tile_pos_to_index(*tile_pos);
+        let index = self.block_pos_to_index(*block_pos);
         if self.mines[index] {
             return MinefieldItem::Mine;
         }
@@ -261,7 +259,7 @@ impl Minefield {
         // Determine the number of mines
         for y_offset in -1..2 {
             for x_offset in -1..2 {
-                let search_pos = vec2(tile_pos.x + x_offset, tile_pos.y + y_offset);
+                let search_pos = vec2(block_pos.x + x_offset, block_pos.y + y_offset);
                 if search_pos.x < 0
                     || search_pos.y < 0
                     || search_pos.x >= self.size.x
@@ -269,7 +267,7 @@ impl Minefield {
                 {
                     continue;
                 }
-                mine_count += self.mines[self.tile_pos_to_index(search_pos)] as u32;
+                mine_count += self.mines[self.block_pos_to_index(search_pos)] as u32;
             }
         }
 
@@ -280,22 +278,22 @@ impl Minefield {
         return MinefieldItem::Blank;
     }
 
-    pub fn remove_tile(
+    pub fn remove_block(
         &mut self,
         bg: &mut RegularBackground,
-        tile_pos: Vector2D<i32>,
+        block_pos: Vector2D<i32>,
         tile_data: &TileData,
     ) {
         // Early exit if the tile position isn't within bounds
-        // The size is in 16x16 tiles, but the tile_pos is in 8x8 tiles, so the size needs to be
-        // multiplied by 2
-        let size_8x8 = self.size;
-        if tile_pos.x >= size_8x8.x || tile_pos.y >= size_8x8.y || tile_pos.x < 0 || tile_pos.y < 0
+        if block_pos.x >= self.size.x
+            || block_pos.y >= self.size.y
+            || block_pos.x < 0
+            || block_pos.y < 0
         {
             return;
         }
 
-        let index = self.tile_pos_to_index(tile_pos);
+        let index = self.block_pos_to_index(block_pos);
         // Check if the tile can be cleared (i.e. not cleared or flagged status)
         match self.blocks[index] {
             MinefieldBlock::Clear | MinefieldBlock::Flag => return, // early return if not
@@ -315,39 +313,39 @@ impl Minefield {
 
         // Clear the tile
         // Multiply tile_pos by 2 because clear tile uses 8x8 coordinates
-        Self::clear_tile16(bg, tile_pos * 2, tile_data);
+        clear_block(bg, block_pos * 2, tile_data);
 
         // Determine the item to draw
-        let minefield_item = self.determine_minefield_item(&tile_pos);
+        let minefield_item = self.determine_minefield_item(&block_pos);
 
-        // TODO: Draw the item
+        // Draw the item
         if minefield_item != MinefieldItem::Blank {
-            Self::draw_tile16(
+            draw_block(
                 bg,
-                tile_pos * 2,
+                block_pos * 2,
                 &background::NUMBERS,
-                minefield_item.get_tile_indices(),
+                minefield_item.get_block_indices(),
             );
         }
         // TODO: If item is a mine, do something?
     }
 
-    pub fn cycle_tile_state(
+    pub fn cycle_block_state(
         &mut self,
         bg: &mut RegularBackground,
-        tile_pos: Vector2D<i32>,
+        block_pos: Vector2D<i32>,
         tile_data: &TileData,
     ) {
         // Early exit if the tile position isn't within bounds
-        // The size is in 16x16 tiles, but the tile_pos is in 8x8 tiles, so the size needs to be
-        // multiplied by 2
-        let size_8x8 = self.size * 2;
-        if tile_pos.x >= size_8x8.x || tile_pos.y >= size_8x8.y || tile_pos.x < 0 || tile_pos.y < 0
+        if block_pos.x >= self.size.x
+            || block_pos.y >= self.size.y
+            || block_pos.x < 0
+            || block_pos.y < 0
         {
             return;
         }
 
-        let index = self.tile_pos_to_index(tile_pos);
+        let index = self.block_pos_to_index(block_pos);
         // Check if the tile can be modified (i.e. not cleared)
         let next_block_type: MinefieldBlock;
         match self.blocks[index] {
@@ -364,14 +362,14 @@ impl Minefield {
         }
 
         // Set the clear status of the tile
-        let tile_indices = next_block_type.get_tile_indices();
+        let tile_indices = next_block_type.get_block_indices();
         self.blocks[index] = next_block_type;
 
         // Draw the tile
-        Self::draw_tile16(bg, tile_pos * 2, tile_data, tile_indices);
+        draw_block(bg, block_pos * 2, tile_data, tile_indices);
     }
 
-    fn tile_under_cursor(&self) -> Vector2D<i32> {
+    fn block_under_cursor(&self) -> Vector2D<i32> {
         let &cursor_pos = &self.cursor.pos;
         let tile_pos = (cursor_pos - self.pos).round() / 16;
         tile_pos
@@ -384,12 +382,12 @@ impl Minefield {
         mixer: &mut Mixer,
     ) {
         if button_controller.is_just_pressed(Button::A) {
-            self.remove_tile(bg, self.tile_under_cursor(), &background::BLOCKS);
+            self.remove_block(bg, self.block_under_cursor(), &background::BLOCKS);
             return;
         }
 
         if button_controller.is_just_pressed(Button::B) {
-            self.cycle_tile_state(bg, self.tile_under_cursor(), &background::BLOCKS);
+            self.cycle_block_state(bg, self.block_under_cursor(), &background::BLOCKS);
             return;
         }
 
