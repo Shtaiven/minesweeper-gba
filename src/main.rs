@@ -44,6 +44,12 @@ static BGM: Track = include_xm!("sfx/bgm.xm");
 
 type Fixed = Num<i32, 8>;
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum GameScreen {
+    Play,
+    GameOver,
+}
+
 pub struct PlayerCursor {
     pos: Vector2D<Fixed>,
 }
@@ -283,36 +289,28 @@ impl Minefield {
         bg: &mut RegularBackground,
         block_pos: Vector2D<i32>,
         tile_data: &TileData,
-    ) {
+    ) -> MinefieldItem {
         // Early exit if the tile position isn't within bounds
         if block_pos.x >= self.size.x
             || block_pos.y >= self.size.y
             || block_pos.x < 0
             || block_pos.y < 0
         {
-            return;
+            return MinefieldItem::Blank;
         }
 
         let index = self.block_pos_to_index(block_pos);
         // Check if the tile can be cleared (i.e. not cleared or flagged status)
         match self.blocks[index] {
-            MinefieldBlock::Clear | MinefieldBlock::Flag => return, // early return if not
+            MinefieldBlock::Clear | MinefieldBlock::Flag => return MinefieldItem::Blank, // early return if not
             _ => (),
         }
 
         // Set the clear status of the tile
         self.blocks[index] = MinefieldBlock::Clear;
 
-        // Handle mines
-        // agb::println!(
-        //     "Block: ({}, {}); Mine: {}",
-        //     tile_pos.x,
-        //     tile_pos.y,
-        //     self.mines[index]
-        // );
-
         // Clear the tile
-        // Multiply tile_pos by 2 because clear tile uses 8x8 coordinates
+        // Multiply block_pos by 2 because clear tile uses tile coordinates
         clear_block(bg, block_pos * 2, tile_data);
 
         // Determine the item to draw
@@ -327,7 +325,9 @@ impl Minefield {
                 minefield_item.get_block_indices(),
             );
         }
-        // TODO: If item is a mine, do something?
+
+        // return the item so that the caller can decide on what to do
+        return minefield_item;
     }
 
     pub fn cycle_block_state(
@@ -380,15 +380,21 @@ impl Minefield {
         bg: &mut RegularBackground,
         button_controller: &ButtonController,
         mixer: &mut Mixer,
-    ) {
+    ) -> GameScreen {
         if button_controller.is_just_pressed(Button::A) {
-            self.remove_block(bg, self.block_under_cursor(), &background::BLOCKS);
-            return;
+            let minefield_item =
+                self.remove_block(bg, self.block_under_cursor(), &background::BLOCKS);
+            if minefield_item == MinefieldItem::Mine {
+                // Go to a game over screen
+                return GameScreen::GameOver;
+            }
+
+            return GameScreen::Play;
         }
 
         if button_controller.is_just_pressed(Button::B) {
             self.cycle_block_state(bg, self.block_under_cursor(), &background::BLOCKS);
-            return;
+            return GameScreen::Play;
         }
 
         // Compute where the cursor would move to
@@ -407,11 +413,13 @@ impl Minefield {
             || maybe_cursor_pos.y < self.pos.y
             || maybe_cursor_pos.y + cursor_size.y > self.pos.y + self.size.y * 16
         {
-            return;
+            return GameScreen::Play;
         }
 
         // Move the cursor based on controller input
         self.cursor.move_by(maybe_move_by, mixer);
+
+        return GameScreen::Play;
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
@@ -449,22 +457,47 @@ fn main(mut gba: agb::Gba) -> ! {
     minefield.gen_mines();
     minefield.draw_minefield(&mut bg);
 
+    let mut next_game_screen = GameScreen::Play;
+    let mut prev_game_screen = next_game_screen;
+    let mut screen_changed;
+
     loop {
         // Read buttons
         button_controller.update();
+        screen_changed = next_game_screen != prev_game_screen;
 
-        minefield.update(&mut bg, &button_controller, &mut mixer);
+        match next_game_screen {
+            // Update the minefield and player cursor and check what the next game screen should be
+            GameScreen::Play => {
+                next_game_screen = minefield.update(&mut bg, &button_controller, &mut mixer);
+            }
+
+            // Handle game over screen
+            GameScreen::GameOver => {
+                if prev_game_screen == GameScreen::Play {
+                    agb::println!("Game over!");
+                }
+                // Play game over animation
+                // Reveal all blocks
+                // Ask player for start input
+            }
+        }
 
         // Prepare the frame
         let mut frame = gfx.frame();
 
         bg.show(&mut frame);
-        minefield.show(&mut frame);
+        if next_game_screen == GameScreen::Play {
+            minefield.show(&mut frame);
+        }
         tracker.step(&mut mixer);
         mixer.frame();
         frame.commit();
 
         // make the random number generator harder to predict
         let _ = agb::rng::next_i32();
+        if screen_changed {
+            prev_game_screen = next_game_screen;
+        }
     }
 }
