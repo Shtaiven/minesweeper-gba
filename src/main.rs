@@ -288,7 +288,7 @@ impl Minefield {
         &mut self,
         bg: &mut RegularBackground,
         block_pos: Vector2D<i32>,
-        tile_data: &TileData,
+        force_remove: bool,
     ) -> MinefieldItem {
         // Early exit if the tile position isn't within bounds
         if block_pos.x >= self.size.x
@@ -300,10 +300,13 @@ impl Minefield {
         }
 
         let index = self.block_pos_to_index(block_pos);
+
         // Check if the tile can be cleared (i.e. not cleared or flagged status)
-        match self.blocks[index] {
-            MinefieldBlock::Clear | MinefieldBlock::Flag => return MinefieldItem::Blank, // early return if not
-            _ => (),
+        if !force_remove {
+            match self.blocks[index] {
+                MinefieldBlock::Clear | MinefieldBlock::Flag => return MinefieldItem::Blank, // early return if not
+                _ => (),
+            }
         }
 
         // Set the clear status of the tile
@@ -311,7 +314,7 @@ impl Minefield {
 
         // Clear the tile
         // Multiply block_pos by 2 because clear tile uses tile coordinates
-        clear_block(bg, block_pos * 2, tile_data);
+        clear_block(bg, block_pos * 2, &background::BLOCKS);
 
         // Determine the item to draw
         let minefield_item = self.determine_minefield_item(&block_pos);
@@ -382,8 +385,7 @@ impl Minefield {
         mixer: &mut Mixer,
     ) -> GameScreen {
         if button_controller.is_just_pressed(Button::A) {
-            let minefield_item =
-                self.remove_block(bg, self.block_under_cursor(), &background::BLOCKS);
+            let minefield_item = self.remove_block(bg, self.block_under_cursor(), false);
             if minefield_item == MinefieldItem::Mine {
                 // Go to a game over screen
                 return GameScreen::GameOver;
@@ -422,6 +424,29 @@ impl Minefield {
         return GameScreen::Play;
     }
 
+    pub fn reveal(&mut self, bg: &mut RegularBackground) {
+        for col in 0..self.size.y {
+            for row in 0..self.size.x {
+                self.remove_block(bg, vec2(row, col), true);
+            }
+        }
+    }
+
+    fn reset_blocks(&mut self) {
+        self.blocks.fill(MinefieldBlock::Block);
+    }
+
+    pub fn reset(&mut self, bg: &mut RegularBackground) {
+        // Reset all blocks
+        self.reset_blocks();
+
+        // Regenerate mines
+        self.gen_mines();
+
+        // Draw the minefield
+        self.draw_minefield(bg);
+    }
+
     pub fn show(&self, frame: &mut GraphicsFrame) {
         self.cursor.show(frame);
     }
@@ -454,8 +479,7 @@ fn main(mut gba: agb::Gba) -> ! {
 
     // Draw blank block tiles
     let mut minefield = Minefield::new(vec2(13, 8), vec2(num!(16), num!(16)));
-    minefield.gen_mines();
-    minefield.draw_minefield(&mut bg);
+    minefield.reset(&mut bg);
 
     let mut next_game_screen = GameScreen::Play;
     let mut prev_game_screen = next_game_screen;
@@ -474,12 +498,17 @@ fn main(mut gba: agb::Gba) -> ! {
 
             // Handle game over screen
             GameScreen::GameOver => {
+                // Reveal all blocks
                 if prev_game_screen == GameScreen::Play {
                     agb::println!("Game over!");
+                    minefield.reveal(&mut bg);
                 }
-                // Play game over animation
-                // Reveal all blocks
+
                 // Ask player for start input
+                if button_controller.is_just_pressed(Button::START) {
+                    minefield.reset(&mut bg);
+                    next_game_screen = GameScreen::Play;
+                }
             }
         }
 
