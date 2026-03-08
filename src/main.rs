@@ -47,7 +47,7 @@ type Fixed = Num<i32, 8>;
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum GameScreen {
     Play,
-    GameOver,
+    GameOver(bool), // bool is for win state, true for win, false for loss
 }
 
 pub struct PlayerCursor {
@@ -378,6 +378,17 @@ impl Minefield {
         tile_pos
     }
 
+    fn is_win_condition(&self) -> bool {
+        // win condition is all non-mine blocks are cleared
+        for (mine, block) in self.mines.iter().zip(self.blocks.iter()) {
+            // if the block doesn't contain a mine and it is cleared
+            if !mine && block != &MinefieldBlock::Clear {
+                return false;
+            }
+        }
+        return true;
+    }
+
     pub fn update(
         &mut self,
         bg: &mut RegularBackground,
@@ -388,7 +399,10 @@ impl Minefield {
             let minefield_item = self.remove_block(bg, self.block_under_cursor(), false);
             if minefield_item == MinefieldItem::Mine {
                 // Go to a game over screen
-                return GameScreen::GameOver;
+                return GameScreen::GameOver(false);
+            }
+            if self.is_win_condition() {
+                return GameScreen::GameOver(true);
             }
 
             return GameScreen::Play;
@@ -497,11 +511,15 @@ fn main(mut gba: agb::Gba) -> ! {
             }
 
             // Handle game over screen
-            GameScreen::GameOver => {
-                // Reveal all blocks
+            GameScreen::GameOver(is_win) => {
+                // Reveal all blocks if isn't win
                 if prev_game_screen == GameScreen::Play {
-                    agb::println!("Game over!");
-                    minefield.reveal(&mut bg);
+                    if is_win {
+                        agb::println!("You win!");
+                    } else {
+                        agb::println!("Game over!");
+                        minefield.reveal(&mut bg);
+                    }
                 }
 
                 // Ask player for start input
