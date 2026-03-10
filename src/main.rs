@@ -117,7 +117,7 @@ impl MinefieldBlock {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum MinefieldItem {
     Blank,
     Number(u32),
@@ -303,10 +303,15 @@ impl Minefield {
 
         let index = self.block_pos_to_index(block_pos);
 
+        // Determine the item to draw
+        let minefield_item = self.determine_minefield_item(&block_pos);
+
         // Check if the tile can be cleared (i.e. not cleared or flagged status)
         if !force_remove {
             match self.blocks[index] {
-                MinefieldBlock::Clear | MinefieldBlock::Flag => return MinefieldItem::Blank, // early return if not
+                MinefieldBlock::Clear | MinefieldBlock::Flag => {
+                    return minefield_item; // early return if not
+                }
                 _ => (),
             }
         }
@@ -317,9 +322,6 @@ impl Minefield {
         // Clear the tile
         // Multiply block_pos by 2 because clear tile uses tile coordinates
         clear_block(bg, block_pos * 2, &background::BLOCKS);
-
-        // Determine the item to draw
-        let minefield_item = self.determine_minefield_item(&block_pos);
 
         // Draw the item
         if minefield_item != MinefieldItem::Blank {
@@ -450,6 +452,10 @@ impl Minefield {
         // Handle player input
         if button_controller.is_just_pressed(Button::A) {
             let block_under_cursor = self.block_under_cursor();
+            if self.blocks[self.block_pos_to_index(block_under_cursor)] == MinefieldBlock::Flag {
+                return GameState::Play;
+            }
+
             let minefield_item = self.remove_block(bg, block_under_cursor, false);
 
             // Go to a game over screen
