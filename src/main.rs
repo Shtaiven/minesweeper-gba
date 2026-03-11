@@ -8,6 +8,8 @@
 
 extern crate alloc;
 
+use core::num;
+
 use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
@@ -182,6 +184,7 @@ pub struct Minefield {
     blocks: Vec<MinefieldBlock>,
     cursor: PlayerCursor,
     blocks_to_clear: Vec<Vector2D<i32>>,
+    frames_since_last_move: u32,
 }
 
 impl Minefield {
@@ -196,6 +199,7 @@ impl Minefield {
             blocks,
             cursor: PlayerCursor::new(pos),
             blocks_to_clear: vec![],
+            frames_since_last_move: 0,
         }
     }
 
@@ -482,10 +486,20 @@ impl Minefield {
         }
 
         // Compute where the cursor would move to
-        let maybe_move_by = vec2(
-            Fixed::from(16 * button_controller.just_pressed_x_tri() as i32),
-            Fixed::from(16 * button_controller.just_pressed_y_tri() as i32),
-        );
+        let mut maybe_move_by = button_controller.just_pressed_vector() * 16;
+        let button_vec = button_controller.vector() * 16;
+        let zero_vec = vec2(num!(0), num!(0));
+
+        // Decide whether to move or not while the button is held down
+        if maybe_move_by != zero_vec {
+            self.frames_since_last_move = 0;
+        } else if button_vec != zero_vec {
+            if self.frames_since_last_move >= 10 {
+                self.frames_since_last_move = 0;
+                maybe_move_by = button_vec;
+            }
+            self.frames_since_last_move += 1;
+        }
 
         // Block the cursor from moving if it would go off of the minefield area
         let maybe_cursor_pos = self.cursor.pos + maybe_move_by;
