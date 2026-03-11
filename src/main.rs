@@ -8,8 +8,6 @@
 
 extern crate alloc;
 
-use core::num;
-
 use agb::display::{
     Graphics, GraphicsFrame, Priority,
     object::Object,
@@ -44,7 +42,12 @@ include_aseprite!(
 static CURSOR_MOVE: SoundData = include_wav!("sfx/ball-paddle-hit.wav");
 static BGM: Track = include_xm!("sfx/bgm.xm");
 
+// Type aliases
 type Fixed = Num<i32, 8>;
+
+// const expressions
+const CURSOR_MOVE_FRAME_TIMEOUT: u32 = 10;
+const BLOCK_CLEAR_FRAME_TIMEOUT: u32 = 3;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum GameState {
@@ -185,6 +188,7 @@ pub struct Minefield {
     cursor: PlayerCursor,
     blocks_to_clear: Vec<Vector2D<i32>>,
     frames_since_last_move: u32,
+    frames_since_last_block_clear: u32,
 }
 
 impl Minefield {
@@ -200,6 +204,7 @@ impl Minefield {
             cursor: PlayerCursor::new(pos),
             blocks_to_clear: vec![],
             frames_since_last_move: 0,
+            frames_since_last_block_clear: 0,
         }
     }
 
@@ -437,6 +442,14 @@ impl Minefield {
         // We return before player input since we don't want the player to be able to do anything
         // at this point
         if !self.blocks_to_clear.is_empty() {
+            if self.frames_since_last_block_clear != 0 {
+                self.frames_since_last_block_clear += 1;
+                if self.frames_since_last_block_clear >= BLOCK_CLEAR_FRAME_TIMEOUT {
+                    self.frames_since_last_block_clear = 0;
+                }
+                return GameState::Play;
+            }
+
             // Copy what's currently in the clear list and clear the blocks to clear, since we
             // Don't want to append to the vector as we modify it
             let blocks_to_clear_copy = self.blocks_to_clear.clone();
@@ -450,6 +463,7 @@ impl Minefield {
                         .extend(self.get_surrounding_uncleared_blocks(block));
                 }
             }
+            self.frames_since_last_block_clear += 1;
             return GameState::Play;
         }
 
@@ -494,7 +508,7 @@ impl Minefield {
         if maybe_move_by != zero_vec {
             self.frames_since_last_move = 0;
         } else if button_vec != zero_vec {
-            if self.frames_since_last_move >= 10 {
+            if self.frames_since_last_move >= CURSOR_MOVE_FRAME_TIMEOUT {
                 self.frames_since_last_move = 0;
                 maybe_move_by = button_vec;
             }
