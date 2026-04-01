@@ -1,0 +1,347 @@
+use_bpm 60
+MIDI_EXPORT = false  # set true when you want to record to LMMS
+
+define :play do |note, opts = {}|
+  orig_play note, opts unless MIDI_EXPORT
+  midi note, channel: opts.fetch(:channel, 1),
+            vel: ((opts.fetch(:amp, 0.8)) * 127).to_i
+end
+
+# ── SHARED PHRASE DEFINITIONS ────────────────────────────────────
+
+define :verse_line_dm do
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+  play :a4;  sleep 0.25
+end
+
+define :verse_line_c do
+  play :g4;  sleep 0.25
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.25
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+  play :g4;  sleep 0.25
+end
+
+define :verse_line_dm_rise do
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+  play :c5;  sleep 0.25
+  play :d5;  sleep 0.25
+end
+
+define :longboat_verse_line_dm do
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+  play :a4;  sleep 0.25
+end
+
+define :longboat_verse_line_c do
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.25
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+  play :g4;  sleep 0.25
+end
+
+define :longboat_verse_line_dm_rise do
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+  play :c5;  sleep 0.25
+  play :d5;  sleep 0.25
+end
+
+define :cadence do
+  play :c5;  sleep 0.25
+  play :a4;  sleep 0.25
+  play :g4;  sleep 0.25
+  play :e4;  sleep 0.25
+  play :d4;  sleep 0.5
+  play :d4;  sleep 0.5
+end
+
+define :chorus_line_dm do
+  play :a4;  sleep 0.5
+  play :a4;  sleep 0.375
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+  play :a4;  sleep 0.25
+end
+
+define :chorus_line_c do
+  play :g4;  sleep 0.5
+  play :g4;  sleep 0.375
+  play :g4;  sleep 0.125
+  play :g4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+  play :g4;  sleep 0.25
+end
+
+define :chorus_line_dm_rise do
+  play :a4;  sleep 0.5
+  play :a4;  sleep 0.375
+  play :a4;  sleep 0.125
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+  play :c5;  sleep 0.25
+  play :d5;  sleep 0.25
+end
+
+# Compound helpers — a full verse or chorus in one call
+define :verse do
+  verse_line_dm
+  verse_line_c
+  verse_line_dm_rise
+  cadence
+end
+
+define :longboat_verse do
+  longboat_verse_line_dm
+  longboat_verse_line_c
+  longboat_verse_line_dm_rise
+  cadence
+end
+
+define :chorus do
+  chorus_line_dm
+  chorus_line_c
+  chorus_line_dm_rise
+  cadence
+end
+
+# ── HARMONY PHRASE DEFINITIONS ───────────────────────────────────
+
+define :harm_verse_dm do
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+end
+
+define :harm_verse_c do
+  play :e4;  sleep 0.25
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.25
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+end
+
+define :harm_verse_dm_rise do
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :g4;  sleep 0.25
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+end
+
+define :harm_longboat_verse_dm do
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+end
+
+define :harm_longboat_verse_c do
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.25
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+end
+
+define :harm_longboat_verse_dm_rise do
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :g4;  sleep 0.25
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+end
+
+define :harm_cadence do
+  play :a4;  sleep 0.25
+  play :f4;  sleep 0.25
+  play :e4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :b3;  sleep 0.5
+  play :b3;  sleep 0.5
+end
+
+define :harm_chorus_dm do
+  play :f4;  sleep 0.5
+  play :f4;  sleep 0.375
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :d4;  sleep 0.25
+  play :f4;  sleep 0.25
+end
+
+define :harm_chorus_c do
+  play :e4;  sleep 0.5
+  play :e4;  sleep 0.375
+  play :e4;  sleep 0.125
+  play :e4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :c4;  sleep 0.25
+  play :e4;  sleep 0.25
+end
+
+define :harm_chorus_dm_rise do
+  play :f4;  sleep 0.5
+  play :f4;  sleep 0.375
+  play :f4;  sleep 0.125
+  play :f4;  sleep 0.25
+  play :g4;  sleep 0.25
+  play :a4;  sleep 0.25
+  play :b4;  sleep 0.25
+end
+
+define :harm_verse do
+  harm_verse_dm
+  harm_verse_c
+  harm_verse_dm_rise
+  harm_cadence
+end
+
+define :harm_longboat_verse do
+  harm_longboat_verse_dm
+  harm_longboat_verse_c
+  harm_longboat_verse_dm_rise
+  harm_cadence
+end
+
+define :harm_chorus do
+  harm_chorus_dm
+  harm_chorus_c
+  harm_chorus_dm_rise
+  harm_cadence
+end
+
+# ── BASS PHRASE DEFINITIONS ──────────────────────────────────────
+
+define :bass_phrase do
+  play :d2;  sleep 0.5
+  play :a2;  sleep 0.5
+  play :c2;  sleep 0.5
+  play :g2;  sleep 0.5
+  play :d2;  sleep 0.5
+  play :a2;  sleep 0.5
+  play :f2;  sleep 0.25
+  play :c2;  sleep 0.25
+  play :d2;  sleep 0.5
+end
+
+# ── MELODY ───────────────────────────────────────────────────────
+in_thread do
+  use_synth :square
+  use_synth_defaults attack: 0.01, release: 0.2, sustain: 0.16, amp: 0.55
+  
+  2.times { verse; chorus }
+  2.times { longboat_verse; chorus }
+end
+
+# ── HARMONY ──────────────────────────────────────────────────────
+in_thread do
+  use_synth :square
+  use_synth_defaults attack: 0.01, release: 0.2, sustain: 0.16, amp: 0.35
+  
+  2.times { harm_verse; harm_chorus }
+  2.times { harm_longboat_verse; harm_chorus }
+end
+
+# ── BASS ─────────────────────────────────────────────────────────
+in_thread do
+  use_synth :square
+  use_synth_defaults attack: 0.01, release: 0.15, sustain: 0.10, amp: 0.65
+  
+  16.times { bass_phrase }
+end
+
+# ── CLAP ─────────────────────────────────────────────────────────
+in_thread do
+  64.times do
+    sleep 0.25
+    sample :perc_snap, amp: 0.5,  rate: 1.0
+    sleep 0.25
+    sleep 0.25
+    sample :perc_snap, amp: 0.45, rate: 0.98
+    sleep 0.25
+  end
+end
